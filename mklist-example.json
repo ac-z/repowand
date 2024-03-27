@@ -1,0 +1,22 @@
+{
+    "neovim": {
+        ".*": "neovim"
+    },
+    "megasync": {
+        "aur": "megasync-bin"
+    },
+    "htop": {
+        ".*": "htop",
+        "aur": "!htop-vim-git"
+    },
+    "distrobox": {
+        "^(?!arch|aur|fedora).*": "distrobox"
+    },
+    "scanmem": {
+        ".*": "(gameconqueror|scanmem)",
+        "debian.*": "!scanmem,gameconqueror"
+    },
+    "+all": {
+        "alpine.*": ".*(-doc|-bash-completion)"
+    }
+}
