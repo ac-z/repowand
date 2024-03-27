@@ -1,0 +1,162 @@
+#!/bin/env python3
+
+# repowand 🪄
+
+# A command-line utility for querying the Repology API.
+
+import sys
+import argparse
+import json
+import requests
+import yaml
+import re
+
+def print_stderr(message):
+    print("\033[1;91m" + message + "\033[0m", file=sys.stderr)
+
+class Package:
+    def __init__(self, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+def parse_packages_from_json(json_string, in_repos):
+    data = json.loads(json_string)
+    packages = []
+    for item in data:
+        # Check if the item's repository is in the list of repositories to include
+        if any(repo in item['repo'] for repo in in_repos) or in_repos == []:
+            # Create a Package object for each item and append it to the list
+            package = Package(**item)
+            packages.append(package)
+    return packages
+
+api_query_count = 0
+repology_api_url = "https://repology.org/api/v1/project/"
+# Function to collect package information from the Repology API
+def collect_packages(package_name, in_repos):
+    # Send a GET request to the Repology API for the specified package
+    response = requests.get(repology_api_url + package_name)
+    response.raise_for_status()
+
+    global api_query_count 
+    api_query_count += 1
+
+    return parse_packages_from_json(response.text, in_repos)
+
+def print_package_info(args):
+    # Collect package information for the specified package
+    packages = collect_packages(args.project, [])
+    for package in packages:
+        # Determine the package name based on available attributes
+        if hasattr(package, 'binname'):
+            package_name = package.binname
+        else:
+            package_name = package.srcname
+
+        print_line = ""
+        for field in args.fields.split(','):
+            if field == 'name':
+                print_line += package_name + " "
+            else:
+                if hasattr(package, field):
+                    print_line += str(getattr(package, field)) + " "
+                else:
+                    print_line += "N/A "
+        print(print_line)
+
+        #repo_name = package.repo + " (src)"
+        #package_version = package.version
+        #print(repo_name + ': ' + package_name + " " + package_version)
+
+def generate_package_list(args):
+    if not args.repos:
+        print_stderr("Error: Must specify repos via -r.")
+        return
+
+    with open(args.yaml_file, 'r') as file:
+        yaml_data = yaml.safe_load(file)
+    
+    universal_filters = [] 
+    if "+all" in yaml_data.keys():
+        universal_filters = yaml_data["+all"]
+        yaml_data.pop("+all")
+
+    repo_args = args.repos.split(',')
+    
+    list_packages = []
+    for project, repos in yaml_data.items():
+        # Collect package information for the current project
+        packages = collect_packages(project, repo_args)
+
+        # Add universal filters to this repo's filters
+        repos.update(universal_filters)
+
+        selected_packages = []
+        override = False
+        for repo_regex, package_regex in repos.items():
+            for repo in repo_args:
+                # Check if the repository arg matches the current regex pattern
+                if re.fullmatch(repo_regex, repo):
+                    # Handle override patterns
+                    if package_regex.startswith('!'):
+                        # Clear the selected packages list and add the override packages
+                        selected_packages = []
+                        for name in re.sub('!', '', package_regex).split(','):
+                            selected_packages.append(name)
+                        override = True
+                        break
+                    else:
+                        # Add packages that match the current package regex to the selected packages list
+                        for package in packages:
+                            if hasattr(package, 'binname'):
+                                package_name = package.binname
+                            else:
+                                package_name = package.visiblename
+                            if not package_name in selected_packages and re.fullmatch(package_regex, package_name):
+                                selected_packages.append(package_name)
+                        break
+            if override:
+                break
+        list_packages.extend(selected_packages)
+    
+    for package in list_packages:
+        print(f"{package}")
+
+def main():
+    parser = argparse.ArgumentParser(description='A command-line utility for querying the Repology API 🪄✨')
+    # Add subparsers for different commands
+    subparsers = parser.add_subparsers(dest='command', title="subcommands")
+
+    # Add the 'compare' command for listing package versions
+    compare_parser = subparsers.add_parser('compare', help='List versions of a given package from each available repo.')
+    compare_parser.add_argument('project', help='Repology project to download package data for.')
+    compare_parser.add_argument('fields', default='repo,name,version', help='Comma-separated list of fields to print for each package.')
+    compare_parser.set_defaults(func=print_package_info)
+
+    # Add the 'mklist' command for generating a package list based on a YAML configuration
+    mklist_parser = subparsers.add_parser('mklist', help='Make a list of packages based on a YAML configuration. Must specify repos via -r.')
+    mklist_parser.add_argument('yaml_file', help='Path to the YAML configuration file.')
+    mklist_parser.set_defaults(func=generate_package_list)
+
+    # Flags for all parsers
+    for p in [parser, compare_parser, mklist_parser]:
+        # Add an optional argument to take a comma-separated list of repos
+        p.add_argument('-r', '--repos', default='', action='store', help='Specify a comma-separated list of repos to include. Default is all repos.')
+        # Add an optional flag for API query count
+        p.add_argument('-q', '--count-api-queries', action='store_true', help='Before exiting, print the total number of Repology API queries that occurred.')
+
+
+
+    # Parse command-line arguments
+    args = parser.parse_args()
+    if args.command:
+        args.func(args)
+    else:
+        parser.print_help()
+
+    if args.count_api_queries:
+        print_stderr(f"API queries: {api_query_count}")
+
+if __name__ == '__main__':
+    main()
+

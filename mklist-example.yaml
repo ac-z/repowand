@@ -1,0 +1,32 @@
+# The top-level keys are Repology project names.
+#
+# Each project can have multiple key-value pairs, where the key is a regex expression matching 
+# the name of one or more repositories listed on Repology, and the value is a regex expression 
+# matching the names of any packages in the project to be included in the output.
+#
+# The goal is to take a list of repos and this yaml file as input and then output a list of
+# packages from those repos. To do this, collect package data for each project listed here, and
+# include any packages where the repo and package name match.
+neovim:
+    ".*": "neovim" # Include a package for all repos.
+megasync:
+    "aur": "megasync-bin" # Or only a specific repo.
+htop:
+    ".*": "htop"
+    "aur": "!htop-vim-git" # You can use ! to override a package in any repo matching the regex. 
+                           # This doesn't use "htop-vim-git" as regex, it replaces htop with 
+                           # htop-vim-git for repos matching "aur".
+distrobox:
+    "^(?!arch|aur|fedora).*": "distrobox" # Include package for all repos except specified.
+scanmem:
+    # Repology sorts both scanmem and gameconqueror under the scanmem project
+    # To include both, do this:
+    ".*": "(gameconqueror|scanmem)"
+    # Debian binary packages aren't listed on repology, only source packages, so Debian's 
+    # gameconqueror package isn't shown on Repology.
+    # Luckily, ! can override with multiple packages, if you give it a comma-separated list.
+    "debian.*": "!scanmem,gameconqueror"
+# The +all keyword can apply patterns to all other projects listed in this file.
++all:
+    # Check for -doc and -bash-completion packages in all projects on alpine
+    "alpine.*": ".*(-doc|-bash-completion)"
