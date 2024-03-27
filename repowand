@@ -7,7 +7,7 @@
 import sys
 import argparse
 import json
-import requests
+import urllib.request as request
 import yaml
 import re
 
@@ -33,15 +33,14 @@ def parse_packages_from_json(json_string, in_repos):
 api_query_count = 0
 repology_api_url = "https://repology.org/api/v1/project/"
 # Function to collect package information from the Repology API
-def collect_packages(package_name, in_repos):
-    # Send a GET request to the Repology API for the specified package
-    response = requests.get(repology_api_url + package_name)
-    response.raise_for_status()
-
+def collect_packages(project_name, in_repos):
     global api_query_count 
     api_query_count += 1
 
-    return parse_packages_from_json(response.text, in_repos)
+    # Send a GET request to the Repology API for the specified package
+    with request.urlopen(repology_api_url + project_name) as response:
+        response_text = response.read().decode('utf-8')
+        return parse_packages_from_json(response_text, in_repos)
 
 def print_package_info(args):
     # Collect package information for the specified package
@@ -63,10 +62,6 @@ def print_package_info(args):
                 else:
                     print_line += "N/A "
         print(print_line)
-
-        #repo_name = package.repo + " (src)"
-        #package_version = package.version
-        #print(repo_name + ': ' + package_name + " " + package_version)
 
 def generate_package_list(args):
     if not args.repos:
