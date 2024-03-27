@@ -70,17 +70,17 @@ def generate_package_list(args):
     # Attempt to import yaml, fall back to json if not available
     try:
         import yaml
-        yaml_load = yaml.safe_load
+        load_config = yaml.safe_load
     except ImportError:
         import json
-        yaml_load = json.loads
+        load_config = json.loads
 
     with open(args.yaml_file, 'r') as file:
         try:
-            yaml_data = yaml_load(file.read())
+            yaml_data = load_config(file.read())
         except:
             print_stderr("Error: Failed to parse configuration file.")
-            if yaml_load == json.loads:
+            if load_config == json.loads:
                 print_stderr("(PyYAML is not installed. Only JSON configurations can be used.)")
             return
     
