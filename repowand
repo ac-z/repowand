@@ -95,7 +95,7 @@ def collect_packages(project_name, in_repos, force_redownload=False):
 
 def print_package_info(args):
     # Collect package information for the specified package
-    packages = collect_packages(args.project, [], args.ignore_cached)
+    packages = collect_packages(args.project, args.repos.split(','), args.ignore_cached)
     for package in packages:
         # Determine the package name based on available attributes
         if hasattr(package, 'binname'):
@@ -116,7 +116,7 @@ def print_package_info(args):
 
 def generate_package_list(args):
     if not args.repos:
-        print_stderr("Error: Must specify repos via -r.")
+        print_stderr("Error: Must specify repos via -R.")
         return
 
     # Attempt to import yaml, fall back to json if not available
@@ -194,7 +194,7 @@ def main():
     compare_parser.set_defaults(func=print_package_info)
 
     # Add the 'mklist' command for generating a package list based on a YAML configuration
-    mklist_parser = subparsers.add_parser('mklist', help='Make a list of packages based on a YAML configuration. Must specify repos via -r.')
+    mklist_parser = subparsers.add_parser('mklist', help='Make a list of packages based on a YAML configuration. Must specify repos via -R.')
     mklist_parser.add_argument('yaml_file', help='Path to the YAML configuration file.')
     mklist_parser.set_defaults(func=generate_package_list)
 
