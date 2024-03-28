@@ -24,7 +24,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import os
 import sys
+import time
 import argparse
 import json
 import urllib.request as request
@@ -49,6 +51,36 @@ def parse_packages_from_json(json_string, in_repos):
             packages.append(package)
     return packages
 
+# Determine the cache directory based on the operating system
+if sys.platform.startswith('win'):
+    cache_dir = os.path.join(os.getenv('LOCALAPPDATA'), 'repowand', 'Cache')
+else:
+    cache_dir = os.path.join(os.path.expanduser('~'), '.cache', 'repowand')
+
+os.makedirs(cache_dir, exist_ok=True)
+cache_duration = 3600 # 1 hour in seconds
+
+def fetch_and_cache_data(url, cache_file_name):
+    # Define the cache file path
+    cache_file_path = os.path.join(cache_dir, f"{cache_file_name}.json")
+
+    # Check if the cache file exists and if it's not too old
+    if os.path.exists(cache_file_path):
+        file_age = time.time() - os.path.getmtime(cache_file_path)
+        if file_age < cache_duration:
+            # Load the cached data
+            with open(cache_file_path, 'r') as file:
+                return file.read()
+
+    # The cache is too old or does not exist, download the data
+    with request.urlopen(url) as response:
+        response_text = response.read().decode('utf-8')
+        # Update or create the cache file
+        with open(cache_file_path, 'w') as file:
+            file.write(response_text)
+
+    return response_text
+
 api_query_count = 0
 repology_api_url = "https://repology.org/api/v1/project/"
 # Function to collect package information from the Repology API
@@ -56,10 +88,10 @@ def collect_packages(project_name, in_repos):
     global api_query_count 
     api_query_count += 1
 
-    # Send a GET request to the Repology API for the specified package
-    with request.urlopen(repology_api_url + project_name) as response:
-        response_text = response.read().decode('utf-8')
-        return parse_packages_from_json(response_text, in_repos)
+    # Fetch and cache the data
+    response_text = fetch_and_cache_data(repology_api_url + project_name, project_name)
+
+    return parse_packages_from_json(response_text, in_repos)
 
 def print_package_info(args):
     # Collect package information for the specified package
