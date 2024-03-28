@@ -60,7 +60,9 @@ else:
 os.makedirs(cache_dir, exist_ok=True)
 cache_duration = 3600 # 1 hour in seconds
 
-def fetch_and_cache_data(url, cache_file_name, force_redownload=False):
+api_query_count = 0
+repology_api_url = "https://repology.org/api/v1/project/"
+def fetch_and_cache_data(project_name, cache_file_name, force_redownload=False):
     # Define the cache file path
     cache_file_path = os.path.join(cache_dir, f"{cache_file_name}.json")
 
@@ -72,7 +74,10 @@ def fetch_and_cache_data(url, cache_file_name, force_redownload=False):
             with open(cache_file_path, 'r') as file:
                 return file.read()
 
-    # The cache is too old or does not exist, or force_redownload is True, download the data
+    global api_query_count 
+    api_query_count += 1
+    # The cache is too old or does not exist, or force_redownload is True, so download the data
+    url = repology_api_url + project_name
     with request.urlopen(url) as response:
         response_text = response.read().decode('utf-8')
         # Update or create the cache file
@@ -81,15 +86,10 @@ def fetch_and_cache_data(url, cache_file_name, force_redownload=False):
 
     return response_text
 
-api_query_count = 0
-repology_api_url = "https://repology.org/api/v1/project/"
 # Function to collect package information from the Repology API
 def collect_packages(project_name, in_repos, force_redownload=False):
-    global api_query_count 
-    api_query_count += 1
-
     # Fetch and cache the data
-    response_text = fetch_and_cache_data(repology_api_url + project_name, project_name, force_redownload)
+    response_text = fetch_and_cache_data(project_name, project_name, force_redownload)
 
     return parse_packages_from_json(response_text, in_repos)
 
