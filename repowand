@@ -127,7 +127,7 @@ def generate_package_list(args):
         import json
         load_config = json.loads
 
-    with open(args.yaml_file, 'r') as file:
+    with open(args.template_file, 'r') as file:
         try:
             yaml_data = load_config(file.read())
         except:
@@ -194,14 +194,15 @@ def main():
     compare_parser.set_defaults(func=print_package_info)
 
     # Add the 'mklist' command for generating a package list based on a YAML configuration
-    mklist_parser = subparsers.add_parser('mklist', help='Make a list of packages based on a YAML configuration. Must specify repos via -R.')
-    mklist_parser.add_argument('yaml_file', help='Path to the YAML configuration file.')
+    mklist_desc = 'Make a list of packages based on a template. Must specify repos via -R.'
+    mklist_parser = subparsers.add_parser('mklist', description=mklist_desc, help=mklist_desc)
+    mklist_parser.add_argument('template_file', help='Path to a template file. JSON and YAML are supported. (PyYAML is required for YAML)')
     mklist_parser.set_defaults(func=generate_package_list)
 
     # Flags for all parsers
     for p in [parser, compare_parser, mklist_parser]:
         # Add an optional argument to take a comma-separated list of repos
-        p.add_argument('-R', '--repos', default='', action='store', help='Specify a comma-separated list of repos to include. Default is all repos.')
+        p.add_argument('-R', '--repos', required=(p == mklist_parser), default='', action='store', help='Specify a comma-separated list of repos to include. Default is all repos.')
         # Add an optional flag for API query count
         p.add_argument('-q', '--count-api-queries', action='store_true', help='Before exiting, print the total number of Repology API queries that occurred.')
         # Add the new flag to force redownload
