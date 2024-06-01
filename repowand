@@ -18,7 +18,7 @@
 # 
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMEN. IN NO EVENT SHALL THE
 # AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
@@ -32,8 +32,14 @@ import json
 import urllib.request as request
 import re
 
+# MARK: - Helpers
 def print_stderr(message):
     print("\033[1;91m" + message + "\033[0m", file=sys.stderr)
+
+def pt_stderr_if_verbose(message):
+    global args
+    if args.verbose:
+        print_stderr(args.command + ": " + message)
 
 class Package:
     def __init__(self, **kwargs):
@@ -51,25 +57,27 @@ def parse_packages_from_json(json_string, in_repos):
             packages.append(package)
     return packages
 
-# Determine the cache directory based on the operating system
-if sys.platform.startswith('win'):
-    cache_dir = os.path.join(os.getenv('LOCALAPPDATA'), 'repowand', 'Cache')
-else:
-    cache_dir = os.path.join(os.path.expanduser('~'), '.cache', 'repowand')
+def init_cache_dir():
+    # Determine the cache directory based on the operating system
+    global cache_dir
+    if sys.platform.startswith('win'):
+        cache_dir = os.path.join(os.getenv('LOCALAPPDATA'), 'repowand', 'Cache')
+    else:
+        cache_dir = os.path.join(os.path.expanduser('~'), '.cache', 'repowand')
+    os.makedirs(cache_dir, exist_ok=True)
 
-os.makedirs(cache_dir, exist_ok=True)
 cache_duration = 3600 # 1 hour in seconds
-
 api_query_count = 0
 repology_api_url = "https://repology.org/api/v1/project/"
-def fetch_and_cache_data(project_name, cache_file_name, force_redownload=False):
+def fetch_and_cache_data(project_name, cache_file_name):
     # Define the cache file path
     cache_file_path = os.path.join(cache_dir, f"{cache_file_name}.json")
 
     # Check if the cache file exists and if it's not too old
-    if os.path.exists(cache_file_path) and not force_redownload:
+    if os.path.exists(cache_file_path) and not args.ignore_cached:
         file_age = time.time() - os.path.getmtime(cache_file_path)
-        if file_age < cache_duration:
+        if file_age < cache_duration or args.use_cached:
+            pt_stderr_if_verbose(f"Using cached data for {project_name}...")
             # Load the cached data
             with open(cache_file_path, 'r') as file:
                 return file.read()
@@ -77,6 +85,7 @@ def fetch_and_cache_data(project_name, cache_file_name, force_redownload=False):
     global api_query_count 
     api_query_count += 1
     # The cache is too old or does not exist, or force_redownload is True, so download the data
+    pt_stderr_if_verbose(f"Downloading data for {project_name}...")
     url = repology_api_url + project_name
     with request.urlopen(url) as response:
         response_text = response.read().decode('utf-8')
@@ -87,15 +96,16 @@ def fetch_and_cache_data(project_name, cache_file_name, force_redownload=False):
     return response_text
 
 # Function to collect package information from the Repology API
-def collect_packages(project_name, in_repos, force_redownload=False):
+def collect_packages(project_name, in_repos):
     # Fetch and cache the data
-    response_text = fetch_and_cache_data(project_name, project_name, force_redownload)
+    response_text = fetch_and_cache_data(project_name, project_name)
 
     return parse_packages_from_json(response_text, in_repos)
 
-def print_package_info(args):
+# MARK: - cmd_compare()
+def cmd_compare(args):
     # Collect package information for the specified package
-    packages = collect_packages(args.project, args.repos.split(','), args.ignore_cached)
+    packages = collect_packages(args.project_name, args.repos.split(','))
     for package in packages:
         # Determine the package name based on available attributes
         if hasattr(package, 'binname'):
@@ -114,7 +124,8 @@ def print_package_info(args):
                     print_line += "N/A "
         print(print_line)
 
-def generate_package_list(args):
+# MARK: - cmd_mklist()
+def cmd_mklist(args):
     if not args.repos:
         print_stderr("Error: Must specify repos via -R.")
         return
@@ -127,14 +138,18 @@ def generate_package_list(args):
         import json
         load_config = json.loads
 
-    with open(args.template_file, 'r') as file:
-        try:
-            yaml_data = load_config(file.read())
-        except:
-            print_stderr("Error: Failed to parse configuration file.")
-            if load_config == json.loads:
-                print_stderr("(PyYAML is not installed. Only JSON configurations can be used.)")
-            return
+    # Allow "-" as a shorthand for stdin
+    if args.template_file == "-":
+        file = sys.stdin
+    else:
+        file = open(args.template_file, 'r')
+    try:
+        yaml_data = load_config(file.read())
+    except:
+        print_stderr("Error: Failed to parse configuration file.")
+        if load_config == json.loads:
+            print_stderr("(PyYAML is not installed. Only JSON configurations can be used.)")
+        return
     
     universal_filters = [] 
     if "+all" in yaml_data.keys():
@@ -146,7 +161,7 @@ def generate_package_list(args):
     list_packages = []
     for project, repos in yaml_data.items():
         # Collect package information for the current project
-        packages = collect_packages(project, repo_args, args.ignore_cached)
+        packages = collect_packages(project, repo_args)
 
         # Add universal filters to this repo's filters
         repos.update(universal_filters)
@@ -159,6 +174,7 @@ def generate_package_list(args):
                 if re.fullmatch(repo_regex, repo):
                     # Handle override patterns
                     if package_regex.startswith('!'):
+                        pt_stderr_if_verbose(f"! Overriding {project} with {package_regex[1:]} due to presence of repo `{repo}`.")
                         # Clear the selected packages list and add the override packages
                         selected_packages = []
                         for name in re.sub('!', '', package_regex).split(','):
@@ -182,45 +198,49 @@ def generate_package_list(args):
     for package in list_packages:
         print(f"{package}")
 
+# MARK: - main()
 def main():
+    init_cache_dir()
     parser = argparse.ArgumentParser(description='A command-line utility for querying the Repology API 🪄✨')
     # Add subparsers for different commands
     subparsers = parser.add_subparsers(dest='command', title="subcommands")
 
     # Add the 'compare' command for listing package versions
     compare_parser = subparsers.add_parser('compare', help='List versions of a given package from each available repo.')
-    compare_parser.add_argument('project', help='Repology project to download package data for.')
-    compare_parser.add_argument('fields', default='repo,name,version', help='Comma-separated list of fields to print for each package.')
-    compare_parser.set_defaults(func=print_package_info)
+    compare_parser.add_argument('project_name', help='Repology project to download package data for.')
+    compare_parser.add_argument('-R', '--repos', required=False, default='', action='store', help='Specify a comma-separated list of repos to include. Default for `compare` is all repos.')
+    compare_parser.add_argument('-f', '--fields', default='repo,name,version', help='Comma-separated list of fields to print for each package.')
+    compare_parser.set_defaults(func=cmd_compare)
 
     # Add the 'mklist' command for generating a package list based on a YAML configuration
     mklist_desc = 'Make a list of packages based on a template. Must specify repos via -R.'
     mklist_parser = subparsers.add_parser('mklist', description=mklist_desc, help=mklist_desc)
-    mklist_parser.add_argument('template_file', help='Path to a template file. JSON and YAML are supported. (PyYAML is required for YAML)')
-    mklist_parser.set_defaults(func=generate_package_list)
+    mklist_parser.add_argument('template_file', help='Path to a template file, or "-" for stdin. JSON and YAML are supported. (PyYAML is required for YAML)')
+    mklist_parser.add_argument('-R', '--repos', required=True, default='', action='store', help='Specify a comma-separated list of repos to include. At least one is required for `mklist`.')
+    mklist_parser.set_defaults(func=cmd_mklist)
 
     # Flags for all parsers
-    for p in [parser, compare_parser, mklist_parser]:
-        # Add an optional argument to take a comma-separated list of repos
-        p.add_argument('-R', '--repos', required=(p == mklist_parser), default='', action='store', help='Specify a comma-separated list of repos to include. Default is all repos.')
-        # Add an optional flag for API query count
-        p.add_argument('-q', '--count-api-queries', action='store_true', help='Before exiting, print the total number of Repology API queries that occurred.')
-        # Add the new flag to force redownload
+    for p in [compare_parser, mklist_parser]:
+        # Optional flag for API query count
+        p.add_argument('-q', '--count-api-queries', action='store_true', help='Before sending the results to stdout, print the number of Repology API queries to stderr.')
+        # Force redownload
         p.add_argument('-c', '--ignore-cached', action='store_true', help='Redownload package data even if it is cached.')
-
-
-
+        # Force cahced
+        p.add_argument('-C', '--use-cached', action='store_true', help='Use cached package data regardless of its age.')
+        # Make output more verbose
+        p.add_argument('-v', '--verbose', action='store_true', help='Print more details to stderr.')
 
     # Parse command-line arguments
+    global args
     args = parser.parse_args()
     if args.command:
         args.func(args)
     else:
         parser.print_help()
+        return
 
     if args.count_api_queries:
         print_stderr(f"API queries: {api_query_count}")
 
 if __name__ == '__main__':
     main()
-
