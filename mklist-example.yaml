@@ -22,8 +22,45 @@ scanmem:
     # Debian binary packages aren't listed on repology, only source packages, so Debian's 
     # gameconqueror package isn't shown on Repology.
     # Luckily, ! can override with multiple packages, if you give it a comma-separated list.
-    "debian.*": "!scanmem,gameconqueror"
+    "(debian|fedora).*": "!scanmem,gameconqueror"
 # The +all keyword can apply patterns to all other projects listed in this file.
 +all:
     # Check for -doc and -bash-completion packages in all projects on alpine
     "alpine.*": ".*(-doc|-bash-completion)"
+
+# Output for the following repos:
+#
+# > repowand mklist mklist-example.yaml -R arch
+# neovim
+# htop
+# gameconqueror
+# scanmem
+#
+# > repowand mklist mklist-example.yaml -R arch,aur
+# neovim
+# megasync-bin
+# htop-vim-git
+# gameconqueror
+# scanmem
+#
+# > repowand mklist mklist-example.yaml -R debian
+# neovim
+# htop
+# distrobox
+# scanmem
+# gameconqueror
+#
+# > repowand mklist mklist-example.yaml -R fedora
+# neovim
+# htop
+# scanmem
+# gameconqueror
+#
+# > repowand mklist mklist-example.yaml -R alpine_edge
+# neovim
+# neovim-doc
+# htop
+# htop-doc
+# distrobox
+# distrobox-bash-completion
+# distrobox-doc
