@@ -66,7 +66,7 @@ def init_cache_dir():
         cache_dir = os.path.join(os.path.expanduser('~'), '.cache', 'repowand')
     os.makedirs(cache_dir, exist_ok=True)
 
-cache_duration = 3600 # 1 hour in seconds
+cache_duration = 14400 # 4 hours in seconds
 api_query_count = 0
 repology_api_url = "https://repology.org/api/v1/project/"
 def fetch_and_cache_data(project_name, cache_file_name):
